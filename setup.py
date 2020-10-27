@@ -33,7 +33,7 @@ def filter_pip_dependencies(root="requirements.txt"):
 
 setuptools.setup(
     name="readability",
-    version="1.0.0",
+    version="1.0.1",
     author="jhw",
     author_email="justin.worrall@gmail.com",
     description="Web content extractor",
