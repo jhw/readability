@@ -28,32 +28,18 @@ img:
 
 Domains=Languages="de|es|fr|it|ru".split("|")
 
+DefaultTags="p|h1|h2|h3|h4|h5|h6".split("|")
+
 UTF8="utf-8"
 
-def has_text_content(el):
-    return re.sub("\\s", "", str(el.text_content()))!=""
+MaxDescriptionSentences=2
 
 def simple_tag_matcher(tag):
     return lambda el: (str(el.tag)==tag and
                        has_text_content(el))
 
-Matchers=[simple_tag_matcher(tag=tag)
-          for tag in "p|h1|h2|h3|h4|h5|h6".split("|")]
-
-def div_class_matcher(patterns):
-    def is_valid(text):
-        for pat in patterns:
-            if pat in text:
-                return True
-        return False
-    return lambda el: (str(el.tag)=="div" and
-                       "class" in el.attrib and
-                       is_valid(el.attrib["class"]) and
-                       has_text_content(el))
-
-Matchers.append(div_class_matcher(patterns="para".split("|")))
-
-MaxDescriptionSentences=2
+def has_text_content(el):
+    return re.sub("\\s", "", str(el.text_content()))!=""
 
 def format_lang(text):
     return re.split("\\-|\\_", text)[0]
@@ -184,8 +170,7 @@ class Counts(dict):
                 for k in sorted(self.keys())]
 
 @add_ids
-def init_body(doc,
-              matchers=Matchers):
+def init_body(doc, matchers):
     def filter_text(el):
         return " ".join([tok
                          for tok in re.split("\\s", str(el.text_content()))
@@ -242,7 +227,8 @@ def finalise(fn):
 """
 
 @finalise
-def fetch(url):
+def fetch(url,
+          tags=DefaultTags):
     resp=requests.get(url)
     if resp.status_code!=200:
         raise RuntimeError("page server returned HTTP %i" % resp.status_code)
@@ -251,8 +237,12 @@ def fetch(url):
         resp.apparent_encoding==UTF8):        
         resp.encoding=resp.apparent_encoding
     doc=html.fromstring(resp.text)
-    head, body = init_head(doc), init_body(doc)
+    head=init_head(doc)
     head["encoding"]=resp.encoding
+    matchers=[simple_tag_matcher(tag=tag)
+              for tag in tags]
+    body=init_body(doc,
+                   matchers=matchers)
     return {"head": head,
             "body": body}
 
