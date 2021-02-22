@@ -34,6 +34,8 @@ UTF8="utf-8"
 
 MaxDescriptionSentences=2
 
+ChunkSize=64
+
 def simple_tag_matcher(tag):
     return lambda el: (str(el.tag)==tag and
                        has_text_content(el))
@@ -201,7 +203,7 @@ def init_body(doc, matchers):
             if (re.sub("\\s", "", item["text"])!='' and
                 filterfn(item))]
 
-def finalise(fn):
+def finalise_head(fn):
     def absolute_img(head):
         if ("img" in head and
             not head["img"].startswith("http")):
@@ -221,12 +223,55 @@ def finalise(fn):
         return resp
     return wrapped
 
+def finalise_body(fn):
+    def init_phrases(tokens):
+        groups, group = [], []
+        for token in tokens:
+            group.append(token)
+            if (token[-1] in "?|." and
+                group!=[]):
+                groups.append(group)
+                group=[]
+        if group!=[]:
+            groups.append(group)
+        return groups
+    def init_chunks(phrases, n=ChunkSize):
+        chunks, chunk = [], []
+        for phrase in phrases:
+            if len(chunk) > n:
+                chunks.append(chunk)
+                chunk=[]
+            chunk+=phrase
+        if chunk!=[]:
+            chunks.append(chunk)
+        return chunks
+    def tokenise(text):
+        tokens=[tok for tok in re.split("\\s", text)
+                if tok!='']
+        phrases=init_phrases(tokens)
+        chunks=init_chunks(phrases)
+        return [" ".join(chunk)
+                for chunk in chunks]
+    def wrapped(url):
+        struct, body, count = fn(url), [], 1
+        for item in struct["body"]:
+            for chunk in tokenise(item["text"]):
+                moditem=dict(item)
+                moditem["text"]=chunk
+                moditem["id"]=count
+                body.append(moditem)
+                count+=1
+        struct["body"]=body
+        return struct
+    return wrapped
+
 """
 - https://requests.readthedocs.io/en/master/user/quickstart/#response-content
 - https://stackoverflow.com/questions/44203397/python-requests-get-returns-improperly-decoded-text-instead-of-utf-8
 """
 
-@finalise
+@finalise_head
+@finalise_body
 def fetch(url,
           tags=DefaultTags):
     resp=requests.get(url)
