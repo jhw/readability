@@ -34,8 +34,6 @@ UTF8="utf-8"
 
 MaxDescriptionSentences=2
 
-ChunkSize=64
-
 def simple_tag_matcher(tag):
     return lambda el: (str(el.tag)==tag and
                        has_text_content(el))
@@ -213,8 +211,8 @@ def finalise_head(fn):
             lang=head["url"].split("/")[2].split(".")[-1]
             if lang in domains:
                 head["lang"]=lang
-    def wrapped(url):
-        resp=fn(url)
+    def wrapped(url, chunksz):
+        resp=fn(url, chunksz)
         head=resp["head"]
         head["url"]=url
         for modifier in [absolute_img,
@@ -235,27 +233,28 @@ def finalise_body(fn):
         if group!=[]:
             groups.append(group)
         return groups
-    def init_chunks(phrases, n=ChunkSize):
+    def init_chunks(phrases, chunksz):
         chunks, chunk = [], []
         for phrase in phrases:
-            if len(chunk) > n:
+            if len(chunk) > chunksz:
                 chunks.append(chunk)
                 chunk=[]
             chunk+=phrase
         if chunk!=[]:
             chunks.append(chunk)
         return chunks
-    def tokenise(text):
+    def tokenise(text, chunksz):
         tokens=[tok for tok in re.split("\\s", text)
                 if tok!='']
         phrases=init_phrases(tokens)
-        chunks=init_chunks(phrases)
+        chunks=init_chunks(phrases, chunksz)
         return [" ".join(chunk)
                 for chunk in chunks]
-    def wrapped(url):
-        struct, body, count = fn(url), [], 1
+    def wrapped(url, chunksz):
+        struct, body, count = fn(url, chunksz), [], 1
         for item in struct["body"]:
-            for chunk in tokenise(item["text"]):
+            for chunk in tokenise(item["text"],
+                                  chunksz):
                 moditem=dict(item)
                 moditem["text"]=chunk
                 moditem["id"]=count
@@ -273,6 +272,7 @@ def finalise_body(fn):
 @finalise_head
 @finalise_body
 def fetch(url,
+          chunksz,
           tags=DefaultTags):
     resp=requests.get(url)
     if resp.status_code!=200:
@@ -294,10 +294,13 @@ def fetch(url,
 if __name__=="__main__":
     try:
         import sys
-        if len(sys.argv) < 2:
-            raise RuntimeError("Please enter URL")
-        url=sys.argv[1]
-        resp=fetch(url)
+        if len(sys.argv) < 3:
+            raise RuntimeError("Please enter URL, chunksz")
+        url, chunksz = sys.argv[1:3]
+        if not re.search("^\\d+$", chunksz):
+            raise RuntimeError("chunksz is invalid")
+        chunksz=int(chunksz)
+        resp=fetch(url, chunksz)
         print (yaml.safe_dump(resp,
                               default_flow_style=False,
                               allow_unicode=True))
